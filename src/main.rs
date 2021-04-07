@@ -1,21 +1,34 @@
+use rand::{thread_rng, Rng};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time::Duration};
 
-static mut ret: [usize; 2] = [0, 0];
+static mut v: bool = true;
+
+fn sleep() {
+    let mut rng = thread_rng();
+    let t = rng.gen_range(100..1000);
+    thread::sleep(Duration::from_nanos(t));
+}
+
 fn main() {
-    let ntry = 10_000;
+    let ntry = 100_000;
+    let mut ret = [0usize, 0usize];
     for _ in 0..ntry {
-        let x = Arc::new(AtomicUsize::new(0));
-        let y = Arc::new(AtomicUsize::new(0));
+        unsafe {
+            v = true;
+        }
+        let x = Arc::new(AtomicBool::new(false));
+        let y = Arc::new(AtomicBool::new(false));
         let th1 = {
             let x = Arc::clone(&x);
             let y = Arc::clone(&y);
             thread::spawn(move || {
+                sleep();
                 let r1 = y.load(Ordering::Relaxed);
                 x.store(r1, Ordering::Relaxed);
                 unsafe {
-                    ret[r1] += 1;
+                    v &= r1;
                 };
             })
         };
@@ -23,17 +36,19 @@ fn main() {
             let x = Arc::clone(&x);
             let y = Arc::clone(&y);
             thread::spawn(move || {
+                sleep();
                 let r2 = x.load(Ordering::Relaxed);
-                y.store(1, Ordering::Relaxed);
+                y.store(true, Ordering::Relaxed);
                 unsafe {
-                    ret[r2] += 1;
+                    v &= r2;
                 };
             })
         };
         th1.join().unwrap();
         th2.join().unwrap();
+        unsafe {
+            ret[v as usize] += 1;
+        }
     }
-    unsafe {
-        println!("{:?}", ret);
-    }
+    println!("{:?}", ret);
 }
